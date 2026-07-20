@@ -1,7 +1,7 @@
 // Canvas input: camera pan/zoom + tile picking + unit action state machine.
 
 import { pixelToHex, hexToPixel, key, parseKey, hexDist } from '/shared/hex.js';
-import { movementRange, attackTargets, pathTo, calcDamage, canBuildAt, unitAt, tileAt } from '/shared/rules.js';
+import { movementRange, attackTargets, pathTo, calcDamage, canBuildAt, unitAt, tileAt, unitDone } from '/shared/rules.js';
 import { UNIT_TYPES } from '/shared/constants.js';
 import { HEX } from './render.js';
 import { sfx } from './sfx.js';
@@ -32,6 +32,7 @@ export class Input {
     canvas.addEventListener('touchend', (e) => this.onTouchEnd(e), { passive: false });
 
     this.nextUnitIdx = 0; // rotation pointer for "next unit"
+    this.cursorFollow = null; // unit id the gold cursor tracks across moves
   }
 
   // ------------- keyboard navigation -------------
@@ -52,6 +53,7 @@ export class Input {
     const nq = this.r.cursor.q + dq;
     const nr = this.r.cursor.r + dr;
     if (!g.tiles.has(key(nq, nr))) return;
+    this.cursorFollow = null; // manual navigation stops following a unit
     this.r.cursor = { q: nq, r: nr };
     this.ensureCursorVisible();
     this.describeCursor();
@@ -114,7 +116,7 @@ export class Input {
     if (!g || !this.cb.isMyTurn()) return false;
     const you = this.cb.you();
     const ready = [...g.units.values()].filter(
-      (u) => u.owner === you && !(u.moved && u.acted)
+      (u) => u.owner === you && !unitDone(g, u)
     );
     if (!ready.length) {
       this.cb.announce?.('No units ready. Press E to end turn.');
@@ -123,6 +125,7 @@ export class Input {
     this.nextUnitIdx = (this.nextUnitIdx + 1) % ready.length;
     const u = ready[this.nextUnitIdx];
     this.r.cursor = { q: u.q, r: u.r };
+    this.cursorFollow = u.id;
     this.selectUnit(u);
     this.ensureCursorVisible();
     this.cb.announce?.(`${UNIT_TYPES[u.type].name} selected, ${u.hp} HP`);
@@ -153,9 +156,16 @@ export class Input {
   refresh() {
     const g = this.r.state;
     if (!g) return this.deselect();
+    // Keep the gold cursor glued to the unit it was placed on (e.g. via
+    // "Next Unit") until the player moves the cursor manually.
+    if (this.cursorFollow != null && this.r.cursor) {
+      const fu = g.units.get(this.cursorFollow);
+      if (fu) this.r.cursor = { q: fu.q, r: fu.r };
+      else this.cursorFollow = null; // unit died; leave cursor where it is
+    }
     if (this.selectedUnit) {
       const u = g.units.get(this.selectedUnit);
-      if (!u || u.owner !== this.cb.you() || (u.moved && u.acted)) {
+      if (!u || u.owner !== this.cb.you() || unitDone(g, u)) {
         this.deselect();
         return;
       }
@@ -167,6 +177,10 @@ export class Input {
     const g = this.r.state;
     this.mode = 'unitSelected';
     this.selectedUnit = u.id;
+    // If the cursor sits on this unit, follow it when it moves.
+    if (this.r.cursor && this.r.cursor.q === u.q && this.r.cursor.r === u.r) {
+      this.cursorFollow = u.id;
+    }
     this.plannedMove = null;
     this.r.selected = u.id;
     this.r.pathPreview = null;
@@ -238,7 +252,7 @@ export class Input {
 
       // Click own other unit -> switch selection.
       if (clickedUnit && clickedUnit.owner === you && clickedUnit.id !== u.id) {
-        if (!(clickedUnit.moved && clickedUnit.acted)) {
+        if (!unitDone(g, clickedUnit)) {
           this.selectUnit(clickedUnit);
           return;
         }
@@ -264,7 +278,7 @@ export class Input {
 
     // ---- idle: select unit or open build menu ----
     if (clickedUnit) {
-      if (clickedUnit.owner === you && (clickedUnit.moved && clickedUnit.acted)) {
+      if (clickedUnit.owner === you && unitDone(g, clickedUnit)) {
         this.cb.updateInfo(clickedUnit);
         return; // exhausted: info only
       }
