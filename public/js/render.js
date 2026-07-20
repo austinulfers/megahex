@@ -2,6 +2,7 @@
 
 import { hexToPixel, hexCorner, key, parseKey } from '/shared/hex.js';
 import { UNIT_TYPES, PLAYER_COLORS, CAPTURE_MAX, MAX_HP } from '/shared/constants.js';
+import { unitDone } from '/shared/rules.js';
 
 export const HEX = 34; // base hex size in world units
 
@@ -375,7 +376,7 @@ export class Renderer {
       const p = pos || this.unitPos(u);
       const color = PLAYER_COLORS[u.owner];
       const t = UNIT_TYPES[u.type];
-      const exhausted = u.owner === this.state.turnIdx && u.moved && u.acted;
+      const exhausted = u.owner === this.state.turnIdx && unitDone(this.state, u);
 
       ctx.save();
       ctx.globalAlpha = alpha * (exhausted ? 0.55 : 1);

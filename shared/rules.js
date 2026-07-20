@@ -171,6 +171,22 @@ export function attackTargets(g, unit, fromQ = unit.q, fromR = unit.r) {
   return out;
 }
 
+// True when a unit has spent its movement and has no action left this turn
+// (i.e. it should be shown as exhausted, like one that just attacked/captured).
+export function unitDone(g, unit) {
+  if (!unit.moved) return false; // movement still available
+  if (unit.acted) return true; // already used both move and action
+  const ut = UNIT_TYPES[unit.type];
+  // Remaining attack from current tile (indirect units cannot fire after moving).
+  if (!ut.indirect && attackTargets(g, unit).length > 0) return false;
+  // Remaining capture on the current tile.
+  if (ut.canCapture) {
+    const t = tileAt(g, unit.q, unit.r);
+    if (t && t.b && t.b.owner !== unit.owner) return false;
+  }
+  return true; // moved but nothing left to do
+}
+
 export function canBuildAt(g, playerIdx, q, r) {
   const t = tileAt(g, q, r);
   if (!t || !t.b) return false;
