@@ -19,6 +19,7 @@ Open the URL in a browser, **Create Game**, share the 5-letter room code, and fr
 | **Combat** | Click a unit, click a red target. Damage scales with attacker HP, unit matchup, and the defender's terrain. Survivors counterattack. |
 | **Terrain** | Plains are fast; forests slow wheels/treads; mountains are infantry-only (+2 defense); water is impassable. Cities ★2 and HQs ★3 defense. |
 | **Fog of war** | Optional lobby setting — you only see what your units and buildings can see. |
+| **Map patterns** | Lobby setting: Classic, Archipelago (island chains), Highlands (dense mountains), Rivers (winding waterways), or Crater (central lake ringed by peaks). |
 
 ### Units
 

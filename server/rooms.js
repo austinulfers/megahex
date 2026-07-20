@@ -3,7 +3,7 @@
 import { randomBytes } from 'node:crypto';
 import { createGame, applyAction, toSnapshot } from '../shared/rules.js';
 import { tilesToWire } from '../shared/mapgen.js';
-import { MAP_SIZES, PLAYER_COLORS, TURN_SKIP_DISCONNECT_MS } from '../shared/constants.js';
+import { MAP_SIZES, MAP_PATTERNS, PLAYER_COLORS, TURN_SKIP_DISCONNECT_MS } from '../shared/constants.js';
 
 const CODE_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'; // no 0/O/1/I
 
@@ -21,7 +21,7 @@ function makeToken() {
 export class Room {
   constructor(code, hostName) {
     this.code = code;
-    this.options = { maxPlayers: 2, mapSize: 'medium', fog: false };
+    this.options = { maxPlayers: 2, mapSize: 'medium', mapPattern: 'classic', fog: false };
     this.players = []; // {name, token, ws|null, idx}
     this.game = null;
     this.mapWire = null;
@@ -70,6 +70,9 @@ export class Room {
     if (opts.mapSize != null && MAP_SIZES[opts.mapSize]) {
       this.options.mapSize = opts.mapSize;
     }
+    if (opts.mapPattern != null && MAP_PATTERNS[opts.mapPattern]) {
+      this.options.mapPattern = opts.mapPattern;
+    }
     if (opts.fog != null) this.options.fog = !!opts.fog;
   }
 
@@ -107,6 +110,7 @@ export class Room {
       seed,
       radius,
       fog: this.options.fog,
+      pattern: this.options.mapPattern,
       players: this.players.map((p) => ({ name: p.name })),
     });
     this.mapWire = tilesToWire(this.game.tiles);

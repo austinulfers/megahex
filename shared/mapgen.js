@@ -1,11 +1,11 @@
 // Seeded procedural map generation. Deterministic for a given (seed, radius, players).
 
-import { mulberry32, hashSeed, shuffle, randInt } from './rng.js';
+import { mulberry32, hashSeed, shuffle, randInt, pick } from './rng.js';
 import { key, parseKey, hexRange, ring, hexDist, hexLine, neighbors } from './hex.js';
-import { TERRAINS } from './constants.js';
+import { TERRAINS, MAP_PATTERNS } from './constants.js';
 
 // Returns { radius, tiles: Map<key, {q,r,t,b:null|{type,owner,cap}}>, hqs: [{q,r,owner}] }
-export function generateMap(seedStr, radius, numPlayers) {
+export function generateMap(seedStr, radius, numPlayers, pattern = 'classic') {
   const rng = mulberry32(hashSeed(String(seedStr)));
   const center = { q: 0, r: 0 };
   const tiles = new Map();
@@ -13,11 +13,7 @@ export function generateMap(seedStr, radius, numPlayers) {
     tiles.set(key(h.q, h.r), { q: h.q, r: h.r, t: 'plains', b: null });
   }
 
-  // Terrain blobs.
-  const area = tiles.size;
-  growBlobs(rng, tiles, radius, 'forest', Math.round(area * 0.16));
-  growBlobs(rng, tiles, radius, 'mountain', Math.round(area * 0.09));
-  growBlobs(rng, tiles, radius, 'water', Math.round(area * 0.10));
+  paintTerrain(rng, tiles, radius, MAP_PATTERNS[pattern] ? pattern : 'classic');
 
   // HQ spots evenly around a ring, jittered start angle.
   const hqRing = ring(center, Math.max(2, radius - 2));
@@ -54,7 +50,7 @@ export function generateMap(seedStr, radius, numPlayers) {
   }
 
   // Scattered neutral cities (~1 per 14 tiles), spaced apart.
-  const wanted = Math.max(numPlayers, Math.round(area / 14));
+  const wanted = Math.max(numPlayers, Math.round(tiles.size / 14));
   const candidates = shuffle(rng, [...tiles.values()]);
   let placed = 0;
   for (const t of candidates) {
@@ -73,7 +69,72 @@ export function generateMap(seedStr, radius, numPlayers) {
   return { radius, tiles, hqs };
 }
 
-function growBlobs(rng, tiles, radius, terrain, targetCount) {
+// Pattern-specific terrain painting. Runs before HQ/city placement, which
+// clears landing zones, and before ensureConnectivity, which carves corridors
+// through anything that separates the HQs.
+function paintTerrain(rng, tiles, radius, pattern) {
+  const area = tiles.size;
+  const center = { q: 0, r: 0 };
+  switch (pattern) {
+    case 'archipelago':
+      // Island clusters: big water bodies, light forest, few peaks.
+      growBlobs(rng, tiles, radius, 'water', Math.round(area * 0.30), 5, 11);
+      growBlobs(rng, tiles, radius, 'forest', Math.round(area * 0.12));
+      growBlobs(rng, tiles, radius, 'mountain', Math.round(area * 0.04));
+      break;
+    case 'highlands':
+      // Rugged interior: dense mountains and forest, almost no water.
+      growBlobs(rng, tiles, radius, 'mountain', Math.round(area * 0.20), 4, 9);
+      growBlobs(rng, tiles, radius, 'forest', Math.round(area * 0.20));
+      growBlobs(rng, tiles, radius, 'water', Math.round(area * 0.04));
+      break;
+    case 'rivers': {
+      // Winding waterways crossing the map, wooded banks.
+      const count = 1 + (radius >= 7 ? 1 : 0) + (radius >= 9 ? 1 : 0);
+      for (let i = 0; i < count; i++) carveRiver(rng, tiles, radius);
+      growBlobs(rng, tiles, radius, 'forest', Math.round(area * 0.14));
+      growBlobs(rng, tiles, radius, 'mountain', Math.round(area * 0.06));
+      break;
+    }
+    case 'crater': {
+      // Central lake ringed by mountains; battle happens on the outer band.
+      const lakeR = Math.min(radius - 2, Math.max(1, Math.round(radius * 0.4)));
+      for (const h of hexRange(center, lakeR)) {
+        tiles.get(key(h.q, h.r)).t = 'water';
+      }
+      for (const h of ring(center, lakeR + 1)) {
+        const t = tiles.get(key(h.q, h.r));
+        if (t) t.t = 'mountain';
+      }
+      growBlobs(rng, tiles, radius, 'forest', Math.round(area * 0.12));
+      growBlobs(rng, tiles, radius, 'water', Math.round(area * 0.04));
+      break;
+    }
+    default: // classic
+      growBlobs(rng, tiles, radius, 'forest', Math.round(area * 0.16));
+      growBlobs(rng, tiles, radius, 'mountain', Math.round(area * 0.09));
+      growBlobs(rng, tiles, radius, 'water', Math.round(area * 0.10));
+  }
+}
+
+// Water line from one map edge to roughly the opposite edge, bent through a
+// random interior waypoint so it winds instead of running straight.
+function carveRiver(rng, tiles, radius) {
+  const center = { q: 0, r: 0 };
+  const rim = ring(center, radius);
+  const i = randInt(rng, 0, rim.length - 1);
+  const j = (i + Math.floor(rim.length / 2) + randInt(rng, -radius, radius) + rim.length) % rim.length;
+  const mid = pick(rng, hexRange(center, Math.max(1, radius - 2)));
+  const points = [rim[i], mid, rim[j]];
+  for (let s = 0; s < points.length - 1; s++) {
+    for (const h of hexLine(points[s], points[s + 1])) {
+      const t = tiles.get(key(h.q, h.r));
+      if (t) t.t = 'water';
+    }
+  }
+}
+
+function growBlobs(rng, tiles, radius, terrain, targetCount, minBlob = 3, maxBlob = 7) {
   const keys = [...tiles.keys()];
   let count = 0;
   let guard = 0;
@@ -81,7 +142,7 @@ function growBlobs(rng, tiles, radius, terrain, targetCount) {
     const startKey = keys[Math.floor(rng() * keys.length)];
     const start = tiles.get(startKey);
     if (start.t !== 'plains') continue;
-    const blobSize = randInt(rng, 3, 7);
+    const blobSize = randInt(rng, minBlob, maxBlob);
     let frontier = [start];
     for (let i = 0; i < blobSize && frontier.length; i++) {
       const idx = Math.floor(rng() * frontier.length);

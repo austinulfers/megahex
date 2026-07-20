@@ -15,6 +15,14 @@ export const MAP_SIZES = {
   large: { radius: 9, label: 'Large' },
 };
 
+export const MAP_PATTERNS = {
+  classic: { label: 'Classic' },
+  archipelago: { label: 'Archipelago' },
+  highlands: { label: 'Highlands' },
+  rivers: { label: 'Rivers' },
+  crater: { label: 'Crater' },
+};
+
 // Terrain: stars = defense stars, cost per movement class (null = impassable).
 export const TERRAINS = {
   plains: { stars: 0, cost: { foot: 1, wheel: 1, tread: 1 } },

@@ -8,8 +8,8 @@ import {
 import { key, parseKey, neighbors, hexDist, hexRange } from './hex.js';
 import { generateMap } from './mapgen.js';
 
-export function createGame({ seed, radius, players, fog = false }) {
-  const map = generateMap(seed, radius, players.length);
+export function createGame({ seed, radius, players, fog = false, pattern = 'classic' }) {
+  const map = generateMap(seed, radius, players.length, pattern);
   const g = {
     seed,
     radius,

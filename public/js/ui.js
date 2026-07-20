@@ -22,6 +22,7 @@ export const els = {
   lobbyOptions: $('#lobby-options'),
   optPlayers: $('#opt-players'),
   optMap: $('#opt-map'),
+  optPattern: $('#opt-pattern'),
   optFog: $('#opt-fog'),
   btnStart: $('#btn-start'),
   btnLeave: $('#btn-leave'),
@@ -105,6 +106,7 @@ export function renderLobby(state, youAreHost) {
   }
   els.optPlayers.value = String(state.options.maxPlayers);
   els.optMap.value = state.options.mapSize;
+  els.optPattern.value = state.options.mapPattern || 'classic';
   els.optFog.checked = !!state.options.fog;
   els.lobbyOptions.classList.toggle('locked', !youAreHost);
   els.btnStart.style.display = youAreHost ? '' : 'none';

@@ -331,12 +331,14 @@ function pushOptions() {
     options: {
       maxPlayers: Number(els.optPlayers.value),
       mapSize: els.optMap.value,
+      mapPattern: els.optPattern.value,
       fog: els.optFog.checked,
     },
   });
 }
 els.optPlayers.addEventListener('change', pushOptions);
 els.optMap.addEventListener('change', pushOptions);
+els.optPattern.addEventListener('change', pushOptions);
 els.optFog.addEventListener('change', pushOptions);
 
 els.btnStart.addEventListener('click', () => {

@@ -58,6 +58,46 @@ test('mapgen: deterministic, correct HQ count, HQs connected', () => {
   assert.equal(same, false);
 });
 
+test('mapgen: patterns are deterministic, distinct, and keep HQs connected', () => {
+  const patterns = ['classic', 'archipelago', 'highlands', 'rivers', 'crater'];
+  const terrainSig = (m) => [...m.tiles.values()].map((t) => t.t).join('');
+  const sigs = new Set();
+  for (const p of patterns) {
+    const a = generateMap('pat-seed', 7, 2, p);
+    const b = generateMap('pat-seed', 7, 2, p);
+    assert.equal(terrainSig(a), terrainSig(b), `${p} deterministic`);
+    sigs.add(terrainSig(a));
+    // HQs mutually reachable over tread-passable terrain.
+    const passable = (t) => TERRAINS[t.t].cost.tread != null;
+    const seen = new Set([key(a.hqs[0].q, a.hqs[0].r)]);
+    const stack = [a.hqs[0]];
+    while (stack.length) {
+      const cur = stack.pop();
+      for (const n of [
+        { q: cur.q + 1, r: cur.r }, { q: cur.q + 1, r: cur.r - 1 }, { q: cur.q, r: cur.r - 1 },
+        { q: cur.q - 1, r: cur.r }, { q: cur.q - 1, r: cur.r + 1 }, { q: cur.q, r: cur.r + 1 },
+      ]) {
+        const k = key(n.q, n.r);
+        if (seen.has(k)) continue;
+        const t = a.tiles.get(k);
+        if (t && passable(t)) {
+          seen.add(k);
+          stack.push(n);
+        }
+      }
+    }
+    for (const hq of a.hqs) {
+      assert.ok(seen.has(key(hq.q, hq.r)), `${p}: HQs connected`);
+    }
+  }
+  assert.equal(sigs.size, patterns.length, 'each pattern yields distinct terrain');
+  // Unknown pattern falls back to classic.
+  assert.equal(
+    terrainSig(generateMap('pat-seed', 7, 2, 'nope')),
+    terrainSig(generateMap('pat-seed', 7, 2, 'classic'))
+  );
+});
+
 test('createGame: starting state', () => {
   const g = newGame();
   assert.equal(g.players.length, 2);
