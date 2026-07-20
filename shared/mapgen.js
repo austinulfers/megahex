@@ -64,9 +64,64 @@ export function generateMap(seedStr, radius, numPlayers, pattern = 'classic') {
     placed++;
   }
 
+  connectLandmasses(tiles);
   ensureConnectivity(tiles, hqs);
 
   return { radius, tiles, hqs };
+}
+
+// No unreachable pockets: every foot-passable tile (anything but water) must
+// belong to a single connected landmass. Merges islands by carving the
+// shortest plains bridge to the largest component, repeating until whole.
+function connectLandmasses(tiles) {
+  const passable = (t) => TERRAINS[t.t].cost.foot != null;
+
+  // Flood-fill foot-passable components.
+  const comps = [];
+  const seen = new Set();
+  for (const start of tiles.values()) {
+    if (!passable(start) || seen.has(key(start.q, start.r))) continue;
+    const comp = [];
+    const stack = [start];
+    seen.add(key(start.q, start.r));
+    while (stack.length) {
+      const cur = stack.pop();
+      comp.push(cur);
+      for (const n of neighbors(cur.q, cur.r)) {
+        const k = key(n.q, n.r);
+        if (seen.has(k)) continue;
+        const t = tiles.get(k);
+        if (t && passable(t)) {
+          seen.add(k);
+          stack.push(t);
+        }
+      }
+    }
+    comps.push(comp);
+  }
+  if (comps.length <= 1) return;
+
+  comps.sort((a, b) => b.length - a.length);
+  const main = comps[0];
+  for (let i = 1; i < comps.length; i++) {
+    // Closest tile pair between the mainland and this island.
+    let best = null;
+    for (const a of main) {
+      for (const b of comps[i]) {
+        const d = hexDist(a, b);
+        if (!best || d < best.d) best = { a, b, d };
+      }
+    }
+    // Carve a plains bridge along the line, then absorb the island.
+    for (const h of hexLine(best.a, best.b)) {
+      const t = tiles.get(key(h.q, h.r));
+      if (t && !passable(t)) {
+        t.t = 'plains';
+        main.push(t);
+      }
+    }
+    main.push(...comps[i]);
+  }
 }
 
 // Pattern-specific terrain painting. Runs before HQ/city placement, which

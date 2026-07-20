@@ -264,6 +264,25 @@ function checkAttrition(g, events) {
   }
 }
 
+// Chip capture points on tile t with unit u (caller has validated eligibility).
+function doCapture(g, playerIdx, u, t, events) {
+  if (t.b.cap == null) t.b.cap = CAPTURE_MAX;
+  t.b.cap -= u.hp;
+  u.moved = true;
+  u.acted = true;
+  if (t.b.cap <= 0) {
+    const prevOwner = t.b.owner;
+    const wasHq = t.b.type === 'hq';
+    t.b.owner = playerIdx;
+    t.b.cap = null;
+    if (wasHq) t.b.type = 'city';
+    events.push({ type: 'captured', q: t.q, r: t.r, owner: playerIdx, building: t.b.type });
+    if (wasHq && prevOwner != null) eliminate(g, prevOwner, events);
+  } else {
+    events.push({ type: 'capture', q: t.q, r: t.r, cap: t.b.cap });
+  }
+}
+
 // ---------------------------------------------------------------------------
 // applyAction: the single entry point for all game mutations.
 // Returns { ok, error?, events: [] }
@@ -373,21 +392,7 @@ export function applyAction(g, playerIdx, action) {
       const t = tileAt(g, u.q, u.r);
       if (!t || !t.b) return fail('No building here');
       if (t.b.owner === playerIdx) return fail('Already yours');
-      if (t.b.cap == null) t.b.cap = CAPTURE_MAX;
-      t.b.cap -= u.hp;
-      u.moved = true;
-      u.acted = true;
-      if (t.b.cap <= 0) {
-        const prevOwner = t.b.owner;
-        const wasHq = t.b.type === 'hq';
-        t.b.owner = playerIdx;
-        t.b.cap = null;
-        if (wasHq) t.b.type = 'city';
-        events.push({ type: 'captured', q: t.q, r: t.r, owner: playerIdx, building: t.b.type });
-        if (wasHq && prevOwner != null) eliminate(g, prevOwner, events);
-      } else {
-        events.push({ type: 'capture', q: t.q, r: t.r, cap: t.b.cap });
-      }
+      doCapture(g, playerIdx, u, t, events);
       break;
     }
 
@@ -415,6 +420,16 @@ export function applyAction(g, playerIdx, action) {
     }
 
     case 'endTurn': {
+      // Auto-capture: any unexhausted capture-capable unit standing on an
+      // enemy/neutral building spends its action capturing.
+      for (const u of unitsOf(g, playerIdx)) {
+        if (u.acted || !UNIT_TYPES[u.type].canCapture) continue;
+        const t = tileAt(g, u.q, u.r);
+        if (!t || !t.b || t.b.owner === playerIdx) continue;
+        doCapture(g, playerIdx, u, t, events);
+        if (g.winner != null) break;
+      }
+      if (g.winner != null) break;
       let guard = 0;
       do {
         g.turnIdx = (g.turnIdx + 1) % g.players.length;

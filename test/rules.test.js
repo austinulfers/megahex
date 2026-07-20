@@ -98,6 +98,38 @@ test('mapgen: patterns are deterministic, distinct, and keep HQs connected', () 
   );
 });
 
+test('mapgen: no unreachable land — all foot-passable tiles form one landmass', () => {
+  const patterns = ['classic', 'archipelago', 'highlands', 'rivers', 'crater'];
+  const footOk = (t) => TERRAINS[t.t].cost.foot != null;
+  for (const p of patterns) {
+    for (const seed of ['land-a', 'land-b', 'land-c', 'land-d', 'land-e']) {
+      for (const radius of [5, 7, 9]) {
+        const m = generateMap(seed, radius, 2, p);
+        const land = [...m.tiles.values()].filter(footOk);
+        // Flood from any land tile; must reach all land.
+        const seen = new Set([key(land[0].q, land[0].r)]);
+        const stack = [land[0]];
+        while (stack.length) {
+          const cur = stack.pop();
+          for (const n of [
+            { q: cur.q + 1, r: cur.r }, { q: cur.q + 1, r: cur.r - 1 }, { q: cur.q, r: cur.r - 1 },
+            { q: cur.q - 1, r: cur.r }, { q: cur.q - 1, r: cur.r + 1 }, { q: cur.q, r: cur.r + 1 },
+          ]) {
+            const k = key(n.q, n.r);
+            if (seen.has(k)) continue;
+            const t = m.tiles.get(k);
+            if (t && footOk(t)) {
+              seen.add(k);
+              stack.push(t);
+            }
+          }
+        }
+        assert.equal(seen.size, land.length, `${p}/${seed}/r${radius}: single landmass`);
+      }
+    }
+  }
+});
+
 test('createGame: starting state', () => {
   const g = newGame();
   assert.equal(g.players.length, 2);
@@ -258,6 +290,39 @@ test('capture: chips capture points, flips building, resets when unit leaves', (
   assert.equal(c3.ok, true);
   assert.equal(t.b.owner, 0);
   assert.ok(c3.events.some((e) => e.type === 'captured'));
+});
+
+test('endTurn auto-captures with unexhausted units on capturable tiles', () => {
+  const g = newGame();
+  for (const h of hexRange({ q: 0, r: 0 }, 3)) forcePlains(g, h.q, h.r);
+  for (const u of [...g.units.values()]) g.units.delete(u.id);
+  const t = g.tiles.get(key(0, 0));
+  t.b = { type: 'city', owner: null, cap: null };
+  const inf = spawnUnit(g, 'INFANTRY', 0, 0, 0, false);
+  inf.hp = 8;
+
+  // End turn without an explicit capture: unit auto-captures.
+  const e1 = applyAction(g, 0, { kind: 'endTurn' });
+  assert.equal(e1.ok, true);
+  assert.ok(e1.events.some((e) => e.type === 'capture'));
+  assert.equal(t.b.cap, CAPTURE_MAX - 8);
+
+  applyAction(g, 1, { kind: 'endTurn' });
+
+  // Exhausted units are not auto-captured again within the same endTurn.
+  applyAction(g, 0, { kind: 'capture', unitId: inf.id });
+  const capAfter = t.b.cap;
+  const e2 = applyAction(g, 0, { kind: 'endTurn' });
+  assert.ok(!e2.events.some((e) => e.type === 'capture' || e.type === 'captured'));
+  assert.equal(t.b.cap, capAfter);
+
+  applyAction(g, 1, { kind: 'endTurn' });
+
+  // Auto-capture can complete the flip.
+  inf.hp = 10;
+  const e3 = applyAction(g, 0, { kind: 'endTurn' });
+  assert.ok(e3.events.some((e) => e.type === 'captured'));
+  assert.equal(t.b.owner, 0);
 });
 
 test('HQ capture eliminates the owner and ends a 2p game', () => {
