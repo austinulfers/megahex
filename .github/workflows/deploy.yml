@@ -19,9 +19,9 @@ jobs:
           host: ${{ secrets.DEPLOY_HOST }}
           username: ${{ secrets.DEPLOY_USER }}
           key: ${{ secrets.DEPLOY_SSH_KEY }}
-          script_stop: true
           script: |
             set -e
+            git config --global --add safe.directory /opt/megahex
             cd /opt/megahex
             git fetch --all
             git reset --hard origin/main
