@@ -1,0 +1,18 @@
+{
+  "name": "megahex",
+  "version": "1.0.0",
+  "description": "MEGAHEX — epic online multiplayer hex-tile turn-based war strategy game",
+  "type": "module",
+  "main": "server/index.js",
+  "scripts": {
+    "start": "node server/index.js",
+    "test": "node --test \"test/*.test.js\"",
+    "test:e2e": "node test/smoke.e2e.mjs"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "dependencies": {
+    "ws": "^8.18.0"
+  }
+}

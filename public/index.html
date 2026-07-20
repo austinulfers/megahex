@@ -1,0 +1,150 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>MEGAHEX — Online Hex War Strategy</title>
+  <link rel="stylesheet" href="/style.css" />
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><polygon points='50,4 93,27 93,73 50,96 7,73 7,27' fill='%23e5484d'/></svg>" />
+</head>
+<body>
+  <!-- ======================= MENU ======================= -->
+  <div id="screen-menu" class="screen active">
+    <div class="menu-box">
+      <h1 class="logo">MEGA<span>HEX</span></h1>
+      <p class="tagline">Epic online multiplayer hex-tile turn-based war strategy</p>
+
+      <label class="field">
+        <span>Commander name</span>
+        <input id="input-name" maxlength="16" placeholder="Commander" autocomplete="off" />
+      </label>
+
+      <div class="menu-actions">
+        <button id="btn-create" class="btn primary">Create Game</button>
+        <div class="join-row">
+          <input id="input-code" maxlength="5" placeholder="CODE" autocomplete="off" aria-label="Room code" />
+          <button id="btn-join" class="btn">Join</button>
+        </div>
+      </div>
+
+      <div id="menu-error" class="error-msg"></div>
+
+      <details class="howto">
+        <summary>How to play</summary>
+        <ul>
+          <li>Capture <b>cities</b> with Infantry for +100g income per turn.</li>
+          <li>Build units at your <b>HQ</b> and cities. Terrain affects movement &amp; defense.</li>
+          <li>Artillery strikes from afar but can't move &amp; fire. Titans crush everything.</li>
+          <li><b>Win</b> by capturing the enemy HQ or destroying everything they own.</li>
+        </ul>
+        <p class="kbd-hints">
+          Keyboard: <kbd>arrows</kbd> cursor · <kbd>Enter</kbd> select/confirm ·
+          <kbd>N</kbd> next unit · <kbd>E</kbd> end turn · <kbd>+</kbd>/<kbd>−</kbd> zoom ·
+          <kbd>M</kbd> mute · <kbd>T</kbd> chat · <kbd>Esc</kbd> cancel
+        </p>
+      </details>
+    </div>
+  </div>
+
+  <!-- ======================= LOBBY ======================= -->
+  <div id="screen-lobby" class="screen">
+    <div class="menu-box">
+      <h2>War Room</h2>
+      <div class="room-code-row">
+        <span>Room code</span>
+        <code id="lobby-code">-----</code>
+        <button id="btn-copy-code" class="btn small" title="Copy code">Copy</button>
+      </div>
+
+      <ul id="lobby-players" class="player-list"></ul>
+
+      <div id="lobby-options" class="options">
+        <label>
+          <span>Players</span>
+          <select id="opt-players">
+            <option value="2">2</option>
+            <option value="3">3</option>
+            <option value="4">4</option>
+          </select>
+        </label>
+        <label>
+          <span>Map</span>
+          <select id="opt-map">
+            <option value="small">Small</option>
+            <option value="medium" selected>Medium</option>
+            <option value="large">Large</option>
+          </select>
+        </label>
+        <label class="checkbox">
+          <input type="checkbox" id="opt-fog" />
+          <span>Fog of war</span>
+        </label>
+      </div>
+
+      <div class="menu-actions">
+        <button id="btn-start" class="btn primary">Start War</button>
+        <button id="btn-leave" class="btn danger">Leave</button>
+      </div>
+      <div id="lobby-hint" class="hint"></div>
+      <div id="lobby-error" class="error-msg"></div>
+    </div>
+  </div>
+
+  <!-- ======================= GAME ======================= -->
+  <div id="screen-game" class="screen">
+    <canvas id="canvas" tabindex="0" role="application"
+      aria-label="Game map. Use arrow keys to move the cursor, Enter to select or confirm, N to jump to your next ready unit."></canvas>
+
+    <div id="hud-top">
+      <div id="hud-players" role="group" aria-label="Players"></div>
+      <div id="hud-turn" aria-live="polite"></div>
+      <div class="hud-spacer"></div>
+      <button id="btn-next-unit" class="btn small" title="Select next ready unit (N)">Next Unit</button>
+      <button id="btn-mute" class="btn small" aria-pressed="false" title="Toggle sound (M)">Sound: On</button>
+      <button id="btn-endturn" class="btn primary">End Turn</button>
+      <button id="btn-resign" class="btn danger small">Resign</button>
+    </div>
+
+    <div id="hud-bottom">
+      <div id="tile-info"></div>
+      <div id="unit-info"></div>
+    </div>
+
+    <!-- Action menu (contextual) -->
+    <div id="action-menu" class="popup hidden" role="menu" aria-label="Unit actions"></div>
+
+    <!-- Build menu -->
+    <div id="build-menu" class="popup hidden" role="menu" aria-label="Deploy unit">
+      <h3>Deploy unit</h3>
+      <div id="build-list"></div>
+      <button id="btn-build-cancel" class="btn small">Cancel</button>
+    </div>
+
+    <!-- Chat -->
+    <div id="chat">
+      <div id="chat-log" role="log" aria-label="Chat messages"></div>
+      <form id="chat-form" autocomplete="off">
+        <input id="chat-input" maxlength="200" placeholder="Message… (T)" aria-label="Chat message" />
+      </form>
+    </div>
+
+    <!-- Toasts / banners -->
+    <div id="banner" class="hidden" aria-hidden="true"></div>
+    <div id="toasts" role="status" aria-live="polite"></div>
+
+    <!-- Screen reader announcements -->
+    <div id="sr-announce" class="sr-only" role="status" aria-live="polite"></div>
+
+    <!-- Game over -->
+    <div id="gameover" class="overlay hidden" role="dialog" aria-modal="true" aria-labelledby="gameover-title">
+      <div class="menu-box">
+        <h2 id="gameover-title">Victory</h2>
+        <p id="gameover-sub"></p>
+        <button id="btn-back-menu" class="btn primary">Back to Menu</button>
+      </div>
+    </div>
+  </div>
+
+  <script type="module" src="/js/main.js"></script>
+</body>
+</html>
