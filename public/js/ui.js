@@ -173,6 +173,16 @@ export function placePopup(popup, screenX, screenY) {
   popup.classList.remove('hidden');
   const pad = 8;
   const rect = popup.getBoundingClientRect();
+  if (matchMedia('(max-width: 600px)').matches) {
+    // Phones: center horizontally; above or below the tapped hex, whichever fits.
+    const x = Math.max(pad, Math.min(innerWidth - rect.width - pad, (innerWidth - rect.width) / 2));
+    let y = screenY + 34;
+    if (y + rect.height > innerHeight - pad) y = screenY - rect.height - 34;
+    y = Math.max(pad, Math.min(innerHeight - rect.height - pad, y));
+    popup.style.left = x + 'px';
+    popup.style.top = y + 'px';
+    return;
+  }
   let x = screenX + 24;
   let y = screenY - rect.height / 2;
   if (x + rect.width > innerWidth - pad) x = screenX - rect.width - 24;

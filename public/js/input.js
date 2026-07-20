@@ -488,15 +488,40 @@ export class Input {
 
   onTouchEnd(e) {
     e.preventDefault();
-    if (this.pinch && e.touches.length < 2) this.pinch = null;
+    if (this.pinch && e.touches.length < 2) {
+      this.pinch = null;
+      // One finger left after a pinch: resume panning with it (no tap on release).
+      if (e.touches.length === 1) {
+        const t = e.touches[0];
+        this.drag = {
+          x: t.clientX, y: t.clientY,
+          camX: this.r.cam.x, camY: this.r.cam.y,
+          moved: true,
+        };
+      }
+    }
     if (this.drag && e.touches.length === 0) {
       const wasDrag = this.drag.moved;
       const { x, y } = this.drag;
       this.drag = null;
+      this.canvas.classList.remove('panning');
       if (!wasDrag) {
         const h = this.pickHex(x, y);
+        this.updateTapInfo(h);
         this.clickHex(h.q, h.r);
       }
     }
+  }
+
+  // Touch has no hover: show tile/unit info for the tapped hex.
+  updateTapInfo(h) {
+    const g = this.r.state;
+    if (!g) return;
+    const t = tileAt(g, h.q, h.r);
+    const visible = !this.r.visible || this.r.visible.has(key(h.q, h.r));
+    this.cb.updateTile?.(t ? (visible ? t : { ...t, b: null }) : null);
+    const u = visible ? unitAt(g, h.q, h.r) : null;
+    if (u) this.cb.updateInfo(u);
+    else if (!this.selectedUnit) this.cb.updateInfo(null);
   }
 }

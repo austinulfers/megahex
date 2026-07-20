@@ -63,6 +63,8 @@ function frame() {
 requestAnimationFrame(frame);
 
 window.addEventListener('resize', () => renderer.resize());
+window.addEventListener('orientationchange', () => setTimeout(() => renderer.resize(), 120));
+window.visualViewport?.addEventListener('resize', () => renderer.resize());
 
 // Hover -> tile info.
 els.canvas.addEventListener('mousemove', (e) => {
