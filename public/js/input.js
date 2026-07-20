@@ -144,6 +144,7 @@ export class Input {
     this.r.selected = null;
     this.r.moveSet = null;
     this.r.attackSet = null;
+    this.r.targetFocus = null;
     this.r.pathPreview = null;
     this.cb.hideMenus();
   }
@@ -316,7 +317,11 @@ export class Input {
         const dmg = calcDamage(g, u, t);
         items.push({
           label: `Attack ${UNIT_TYPES[t.type].name}`,
+          sub: `${t.hp} HP`,
           dmg: `-${dmg}`,
+          ariaLabel: `Attack ${UNIT_TYPES[t.type].name} at ${t.q}, ${t.r}, ${t.hp} HP, deals ${dmg} damage`,
+          onFocus: () => { this.r.targetFocus = { q: t.q, r: t.r }; },
+          onBlur: () => { this.r.targetFocus = null; },
           act: () => {
             const action = { kind: 'attack', unitId: u.id, targetId: t.id };
             if (movingAway) action.moveTo = { q, r };
@@ -405,10 +410,12 @@ export class Input {
     // Hover + path preview.
     const h = this.pickHex(e.clientX, e.clientY);
     this.r.hover = h;
+    const menuOpen = !!document.querySelector('#action-menu:not(.hidden)');
+    if (menuOpen) return;
     if (this.mode === 'unitSelected' && this.range && this.r.moveSet?.has(key(h.q, h.r))) {
       const u = this.r.state.units.get(this.selectedUnit);
       if (u && !u.moved) this.r.pathPreview = pathTo(this.r.state, u, key(h.q, h.r));
-    } else if (!document.querySelector('#action-menu:not(.hidden)')) {
+    } else {
       this.r.pathPreview = null;
     }
   }

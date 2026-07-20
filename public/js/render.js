@@ -33,6 +33,7 @@ export class Renderer {
     this.selected = null; // unit id
     this.moveSet = null; // Set of dest keys
     this.attackSet = null; // Set of target hex keys
+    this.targetFocus = null; // {q,r} hex highlighted from the action menu
     this.hover = null; // {q,r}
     this.cursor = null; // {q,r} keyboard cursor
     this.pathPreview = null; // [{q,r}]
@@ -278,6 +279,17 @@ export class Renderer {
         ctx.lineWidth = 2;
         ctx.stroke();
       }
+    }
+    // Focused attack target (hovered in the action menu): pulsing crosshair.
+    if (this.targetFocus) {
+      const p = hexToPixel(this.targetFocus.q, this.targetFocus.r, HEX);
+      const pulse = 0.6 + 0.4 * Math.sin(performance.now() / 150);
+      this.hexPath(ctx, p.x, p.y, HEX - 2);
+      ctx.fillStyle = '#e5484d55';
+      ctx.fill();
+      ctx.strokeStyle = `rgba(255, 210, 80, ${pulse})`;
+      ctx.lineWidth = 4;
+      ctx.stroke();
     }
     // Path preview.
     if (this.pathPreview && this.pathPreview.length > 1) {

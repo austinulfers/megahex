@@ -210,6 +210,14 @@ export function showActionMenu(screenX, screenY, items, onClose) {
       (item.dmg ? `<span class="dmg">${item.dmg}</span>` : '') +
       (item.sub ? `<span class="sub">${item.sub}</span>` : '');
     if (item.ariaLabel) btn.setAttribute('aria-label', item.ariaLabel);
+    if (item.onFocus) {
+      btn.addEventListener('mouseenter', item.onFocus);
+      btn.addEventListener('focus', item.onFocus);
+    }
+    if (item.onBlur) {
+      btn.addEventListener('mouseleave', item.onBlur);
+      btn.addEventListener('blur', item.onBlur);
+    }
     btn.addEventListener('click', () => {
       hideActionMenu();
       item.act();
