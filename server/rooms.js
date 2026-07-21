@@ -2,8 +2,12 @@
 
 import { randomBytes } from 'node:crypto';
 import { createGame, applyAction, toSnapshot } from '../shared/rules.js';
+import { nextAiAction } from '../shared/ai.js';
 import { tilesToWire } from '../shared/mapgen.js';
-import { MAP_SIZES, MAP_PATTERNS, PLAYER_COLORS, TURN_SKIP_DISCONNECT_MS } from '../shared/constants.js';
+import {
+  MAP_SIZES, MAP_PATTERNS, PLAYER_COLORS, TURN_SKIP_DISCONNECT_MS,
+  AI_NAMES, BOT_ACTION_DELAY_MS,
+} from '../shared/constants.js';
 
 const CODE_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'; // no 0/O/1/I
 
@@ -29,6 +33,7 @@ export class Room {
     this.createdAt = Date.now();
     this.lastActivity = Date.now();
     this.skipTimer = null;
+    this.botTimer = null;
     this.chatTimes = new Map(); // idx -> [timestamps]
   }
 
@@ -54,7 +59,35 @@ export class Room {
   removeLobbyPlayer(idx) {
     if (this.started) return;
     this.players.splice(idx, 1);
+    // Host must be human: if a bot floated to slot 0, promote the first human.
+    const h = this.players.findIndex((p) => !p.isBot);
+    if (h > 0) this.players.unshift(this.players.splice(h, 1)[0]);
     this.players.forEach((p, i) => (p.idx = i));
+  }
+
+  addBot() {
+    if (this.started) return { error: 'Game already started' };
+    if (this.players.length >= this.options.maxPlayers) return { error: 'Room is full' };
+    const used = new Set(this.players.map((p) => p.name));
+    const name = AI_NAMES.find((n) => !used.has(n)) || `BOT-${this.players.length}`;
+    const bot = {
+      name,
+      token: makeToken(),
+      ws: null,
+      idx: this.players.length,
+      isBot: true,
+    };
+    this.players.push(bot);
+    this.touch();
+    return { player: bot };
+  }
+
+  removeBot(idx) {
+    if (this.started) return { error: 'Game already started' };
+    const p = this.players[idx];
+    if (!p || !p.isBot) return { error: 'Not an AI player' };
+    this.removeLobbyPlayer(idx);
+    return {};
   }
 
   findByToken(token) {
@@ -85,8 +118,9 @@ export class Room {
       players: this.players.map((p, i) => ({
         name: p.name,
         color: PLAYER_COLORS[i],
-        connected: !!p.ws,
+        connected: !!p.ws || !!p.isBot,
         isHost: i === 0,
+        isBot: !!p.isBot,
       })),
     };
   }
@@ -120,6 +154,7 @@ export class Room {
       }
     }
     this.armSkipTimerIfNeeded();
+    this.maybeScheduleBot();
     return {};
   }
 
@@ -139,8 +174,9 @@ export class Room {
     const snap = toSnapshot(this.game, idx);
     snap.players = snap.players.map((p, i) => ({
       ...p,
-      connected: !!this.players[i].ws,
+      connected: !!this.players[i].ws || !!this.players[i].isBot,
       isHost: i === 0,
+      isBot: !!this.players[i].isBot,
     }));
     return snap;
   }
@@ -182,7 +218,45 @@ export class Room {
     this.touch();
     this.broadcastUpdate(playerIdx, res.events);
     this.armSkipTimerIfNeeded();
+    this.maybeScheduleBot();
     return {};
+  }
+
+  // ---- AI turn driver: one paced action per tick so clients see animations ----
+  maybeScheduleBot() {
+    clearTimeout(this.botTimer);
+    this.botTimer = null;
+    if (!this.started || !this.game || this.game.winner != null) return;
+    const cur = this.players[this.game.turnIdx];
+    if (!cur || !cur.isBot) return;
+    // Pause AI while no human is connected (resumes on rejoin).
+    if (!this.players.some((p) => !p.isBot && p.ws)) return;
+    this.botActionsThisTurn = this.botActionsThisTurn || 0;
+    this.botTimer = setTimeout(() => this.botStep(), BOT_ACTION_DELAY_MS);
+  }
+
+  botStep() {
+    if (!this.started || !this.game || this.game.winner != null) return;
+    const idx = this.game.turnIdx;
+    const cur = this.players[idx];
+    if (!cur || !cur.isBot) return;
+
+    let action = nextAiAction(this.game, idx);
+    // Safety valves: never let a stuck bot stall the game.
+    this.botActionsThisTurn = (this.botActionsThisTurn || 0) + 1;
+    if (!action || this.botActionsThisTurn > 300) action = { kind: 'endTurn' };
+
+    let res = applyAction(this.game, idx, action);
+    if (!res.ok && action.kind !== 'endTurn') {
+      res = applyAction(this.game, idx, { kind: 'endTurn' });
+    }
+    if (res.ok) {
+      this.touch();
+      this.broadcastUpdate(idx, res.events);
+    }
+    if (this.game.turnIdx !== idx) this.botActionsThisTurn = 0;
+    this.armSkipTimerIfNeeded();
+    this.maybeScheduleBot();
   }
 
   broadcastUpdate(actorIdx, events) {
@@ -226,11 +300,14 @@ export class Room {
     if (!this.started) {
       // In lobby: drop the player entirely (host leaving hands host to next).
       this.removeLobbyPlayer(idx);
+      // A lobby of only bots can never start; empty it so the room can GC.
+      if (!this.players.some((pl) => !pl.isBot)) this.players.length = 0;
       this.broadcastLobby();
       return;
     }
     this.broadcastUpdate(-1, []); // refresh connected flags
     this.armSkipTimerIfNeeded();
+    this.maybeScheduleBot(); // pauses bots if the last human left
   }
 
   onRejoin(token, ws) {
@@ -245,6 +322,7 @@ export class Room {
       ws.send(JSON.stringify(this.startPayload(this.players.indexOf(p))));
       this.broadcastUpdate(-1, []);
       this.armSkipTimerIfNeeded();
+      this.maybeScheduleBot();
     } else {
       this.broadcastLobby();
     }
@@ -258,14 +336,15 @@ export class Room {
     this.skipTimer = null;
     if (!this.started || !this.game || this.game.winner != null) return;
     const cur = this.players[this.game.turnIdx];
-    if (cur && !cur.ws) {
+    if (cur && !cur.ws && !cur.isBot) {
       const turnAtArm = { idx: this.game.turnIdx, round: this.game.round };
       this.skipTimer = setTimeout(() => {
         if (!this.game || this.game.winner != null) return;
         if (
           this.game.turnIdx === turnAtArm.idx &&
           this.game.round === turnAtArm.round &&
-          !this.players[this.game.turnIdx].ws
+          !this.players[this.game.turnIdx].ws &&
+          !this.players[this.game.turnIdx].isBot
         ) {
           const res = applyAction(this.game, this.game.turnIdx, { kind: 'endTurn' });
           if (res.ok) this.broadcastUpdate(this.game.turnIdx, res.events);
@@ -283,6 +362,7 @@ export class Room {
 
   destroy() {
     clearTimeout(this.skipTimer);
+    clearTimeout(this.botTimer);
     for (const p of this.players) {
       try { p.ws?.close(); } catch {}
     }

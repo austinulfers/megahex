@@ -76,3 +76,7 @@ export const DMG_MULT = {
 
 export const BUILDING_SIGHT = 2;
 export const TURN_SKIP_DISCONNECT_MS = 45000;
+
+// AI opponents
+export const AI_NAMES = ['HEXBOT', 'WARMIND', 'OVERLORD'];
+export const BOT_ACTION_DELAY_MS = 550;

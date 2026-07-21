@@ -7,6 +7,7 @@ import {
 } from '../shared/rules.js';
 import { key, hexDist, hexRange, ring, hexLine, pixelToHex, hexToPixel } from '../shared/hex.js';
 import { UNIT_TYPES, CAPTURE_MAX, START_GOLD, INCOME_PER_BUILDING, TERRAINS } from '../shared/constants.js';
+import { nextAiAction } from '../shared/ai.js';
 
 function newGame(opts = {}) {
   return createGame({
@@ -435,4 +436,61 @@ test('wire snapshot roundtrip preserves counts', () => {
     [...g.tiles.values()].filter((t) => t.b).length
   );
   assert.equal(typeof snap.turnIdx, 'number');
+});
+
+// ---------------------------------------------------------------------------
+// AI opponent
+// ---------------------------------------------------------------------------
+
+// Drive one full AI turn; returns number of actions taken.
+function runAiTurn(g, idx) {
+  let steps = 0;
+  while (g.turnIdx === idx && g.winner == null && steps < 400) {
+    const action = nextAiAction(g, idx) ?? { kind: 'endTurn' };
+    const res = applyAction(g, idx, action);
+    assert.equal(res.ok, true, `AI action failed: ${action.kind} — ${res.error}`);
+    steps++;
+  }
+  return steps;
+}
+
+test('ai: every proposed action is legal and the turn terminates', () => {
+  const g = newGame({ seed: 'ai-legal' });
+  const steps = runAiTurn(g, 0);
+  assert.ok(steps > 0 && steps < 400);
+  assert.equal(g.turnIdx, 1); // turn was ended
+});
+
+test('ai: takes an obvious kill', () => {
+  const g = newGame({ seed: 'ai-kill' });
+  const me = [...g.units.values()].find((u) => u.owner === 0);
+  forcePlains(g, me.q, me.r);
+  // Weak enemy right next door.
+  const nb = [...g.tiles.values()].find(
+    (t) => hexDist(t, me) === 1 && TERRAINS[t.t].cost.foot != null && !unitAt(g, t.q, t.r)
+  );
+  forcePlains(g, nb.q, nb.r);
+  const victim = spawnUnit(g, 'INFANTRY', 1, nb.q, nb.r, false);
+  victim.hp = 1;
+
+  let killed = false;
+  let guard = 0;
+  while (g.turnIdx === 0 && guard++ < 400) {
+    const action = nextAiAction(g, 0) ?? { kind: 'endTurn' };
+    const res = applyAction(g, 0, action);
+    assert.equal(res.ok, true);
+    if (action.kind === 'attack' && action.targetId === victim.id) killed = true;
+  }
+  assert.equal(killed, true);
+  assert.equal(g.units.has(victim.id), false);
+});
+
+test('ai vs ai: full game reaches a winner', () => {
+  const g = newGame({ seed: 'ai-duel', radius: 4 });
+  let rounds = 0;
+  while (g.winner == null && rounds < 2000) {
+    runAiTurn(g, g.turnIdx);
+    rounds++;
+  }
+  assert.notEqual(g.winner, null, 'AI vs AI game should finish');
 });

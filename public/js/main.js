@@ -295,6 +295,16 @@ els.btnCreate.addEventListener('click', () => {
   net.send({ type: 'create', name: commanderName() });
 });
 
+els.btnVsAi.addEventListener('click', () => {
+  unlock();
+  if (!net.isOpen()) {
+    els.menuError.textContent = 'Connecting to server…';
+    return;
+  }
+  net.clearSession();
+  net.send({ type: 'create', name: commanderName(), vsAI: true });
+});
+
 els.btnJoin.addEventListener('click', joinGame);
 els.code.addEventListener('keydown', (e) => {
   if (e.key === 'Enter') joinGame();
@@ -340,6 +350,15 @@ els.optPlayers.addEventListener('change', pushOptions);
 els.optMap.addEventListener('change', pushOptions);
 els.optPattern.addEventListener('change', pushOptions);
 els.optFog.addEventListener('change', pushOptions);
+
+els.btnAddBot.addEventListener('click', () => {
+  net.send({ type: 'addBot' });
+});
+
+els.lobbyPlayers.addEventListener('click', (e) => {
+  const btn = e.target.closest('.btn-remove-bot');
+  if (btn) net.send({ type: 'removeBot', idx: Number(btn.dataset.idx) });
+});
 
 els.btnStart.addEventListener('click', () => {
   unlock();

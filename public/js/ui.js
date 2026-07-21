@@ -13,12 +13,14 @@ export const els = {
   name: $('#input-name'),
   code: $('#input-code'),
   btnCreate: $('#btn-create'),
+  btnVsAi: $('#btn-vs-ai'),
   btnJoin: $('#btn-join'),
   menuError: $('#menu-error'),
 
   lobbyCode: $('#lobby-code'),
   btnCopyCode: $('#btn-copy-code'),
   lobbyPlayers: $('#lobby-players'),
+  btnAddBot: $('#btn-add-bot'),
   lobbyOptions: $('#lobby-options'),
   optPlayers: $('#opt-players'),
   optMap: $('#opt-map'),
@@ -96,9 +98,14 @@ export function renderLobby(state, youAreHost) {
     const li = document.createElement('li');
     const p = state.players[i];
     if (p) {
+      const tag = p.isHost
+        ? '<span class="host-tag">HOST</span>'
+        : p.isBot
+          ? `<span class="bot-tag">AI</span>${youAreHost ? `<button class="btn-remove-bot" data-idx="${i}" title="Remove AI" aria-label="Remove ${escapeHtml(p.name)}">✕</button>` : ''}`
+          : p.connected ? '' : '<span class="off">offline</span>';
       li.innerHTML = `<span class="dot" style="background:${PLAYER_COLORS[i]}"></span>
         <span>${escapeHtml(p.name)}</span>
-        ${p.isHost ? '<span class="host-tag">HOST</span>' : p.connected ? '' : '<span class="off">offline</span>'}`;
+        ${tag}`;
     } else {
       li.innerHTML = `<span class="dot" style="background:#2a3648"></span><span style="color:var(--muted)">Waiting for player…</span>`;
     }
@@ -109,11 +116,13 @@ export function renderLobby(state, youAreHost) {
   els.optPattern.value = state.options.mapPattern || 'classic';
   els.optFog.checked = !!state.options.fog;
   els.lobbyOptions.classList.toggle('locked', !youAreHost);
+  els.btnAddBot.style.display =
+    youAreHost && state.players.length < state.options.maxPlayers ? '' : 'none';
   els.btnStart.style.display = youAreHost ? '' : 'none';
   els.btnStart.disabled = state.players.length < 2;
   els.lobbyHint.textContent = youAreHost
     ? state.players.length < 2
-      ? 'Share the room code with friends to fill the lobby.'
+      ? 'Share the room code with friends — or add an AI opponent.'
       : 'Ready when you are, Commander.'
     : 'Waiting for the host to start the war…';
 }

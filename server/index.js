@@ -87,6 +87,7 @@ wss.on('connection', (ws) => {
           room = r;
           player = res.player;
           if (msg.options) room.setOptions(msg.options);
+          if (msg.vsAI) room.addBot();
           send(ws, { type: 'joined', code: room.code, you: myIdx(), token: player.token });
           room.broadcastLobby();
           break;
@@ -120,6 +121,24 @@ wss.on('connection', (ws) => {
           if (!room) return sendError(ws, 'Not in a room');
           if (myIdx() !== 0) return sendError(ws, 'Only the host can change options');
           room.setOptions(msg.options || {});
+          room.broadcastLobby();
+          break;
+        }
+
+        case 'addBot': {
+          if (!room) return sendError(ws, 'Not in a room');
+          if (myIdx() !== 0) return sendError(ws, 'Only the host can add AI players');
+          const res = room.addBot();
+          if (res.error) return sendError(ws, res.error);
+          room.broadcastLobby();
+          break;
+        }
+
+        case 'removeBot': {
+          if (!room) return sendError(ws, 'Not in a room');
+          if (myIdx() !== 0) return sendError(ws, 'Only the host can remove AI players');
+          const res = room.removeBot(Number(msg.idx));
+          if (res.error) return sendError(ws, res.error);
           room.broadcastLobby();
           break;
         }
